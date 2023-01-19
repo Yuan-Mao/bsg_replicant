@@ -20,6 +20,8 @@ int kernel_host_stream(int *buffer_chain, int *buffer_count)
     int *next_buffer = &buffer_chain[0] + ((__bsg_id+1) * BUFFER_ELS);
     int *next_count = &buffer_count[0] + (__bsg_id+1);
 
+    bsg_printf("[%x] B %x C %x NB %x NC: %x\n", __bsg_id, buffer, count, next_buffer, next_count);
+
     bsg_manycore_spsc_queue_recv<int, BUFFER_ELS> recv_spsc(buffer, count);
     bsg_manycore_spsc_queue_send<int, BUFFER_ELS> send_spsc(next_buffer, next_count);
 

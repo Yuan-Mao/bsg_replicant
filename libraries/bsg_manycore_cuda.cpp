@@ -1431,7 +1431,6 @@ int hb_mc_device_pod_kernel_enqueue(hb_mc_device_t    *device,
 /**
  * Check if all tile groups have completed
  */
-static
 int hb_mc_device_pod_all_tile_groups_finished(hb_mc_device_t *device, hb_mc_pod_t *pod)
 {
         hb_mc_tile_group_t *tile_group;
@@ -1633,7 +1632,7 @@ static
 int hb_mc_device_pod_tile_group_launch(hb_mc_device_t *device, hb_mc_pod_t *pod, hb_mc_tile_group_t *tile_group)
 {
         hb_mc_kernel_t *kernel = tile_group->kernel;
-        bsg_pr_dbg("%s: device<%s>: program<%s>: Launching tile group running kernel = '%s'\n",
+        bsg_pr_info("%s: device<%s>: program<%s>: Launching tile group running kernel = '%s'\n",
                    __func__, device->name, pod->program->bin_name, kernel->name);
 
         // initialize argv
@@ -1683,7 +1682,6 @@ int hb_mc_device_podv_wait_for_tile_group_finish_any(hb_mc_device_t *device,
 /**
  * Wait for a tile group to complete for a pod.
  */
-static
 int hb_mc_device_pod_wait_for_tile_group_finish_any(hb_mc_device_t *device, hb_mc_pod_t *pod)
 {
         hb_mc_pod_id_t pid, pid_done;
@@ -1696,7 +1694,6 @@ int hb_mc_device_pod_wait_for_tile_group_finish_any(hb_mc_device_t *device, hb_m
 /**
  * Try to launch as many tile groups as possible in pod
  */
-static
 int hb_mc_device_pod_try_launch_tile_groups(hb_mc_device_t *device,
                                             hb_mc_pod_t *pod)
 
@@ -1809,7 +1806,7 @@ int hb_mc_device_podv_wait_for_tile_group_finish_any(hb_mc_device_t *device,
                                                      int podc,
                                                      hb_mc_pod_id_t *pod_done)
 {
-        bsg_pr_dbg("%s: calling\n", __func__);
+        bsg_pr_info("%s: calling\n", __func__);
 
         while (true) {
                 hb_mc_request_packet_t rqst;
