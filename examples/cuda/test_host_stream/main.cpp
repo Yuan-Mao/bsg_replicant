@@ -37,6 +37,7 @@
 #include <sys/ioctl.h>
 #include <stdio.h>
 #include <bsg_manycore_regression.h>
+#include <bsg_manycore_responder.h>
 #include <algorithm>
 
 #define ALLOC_NAME "default_allocator"
@@ -52,6 +53,40 @@
  * Device then calls an empty kernel and loads back the meomry to compare.
  * This tests uses the software/spmd/bsg_cuda_lite_runtime/host_stream/ Manycore binary in the BSG Manycore bitbucket repository.  
 */
+
+//////////////////////////////////////////////////////
+// Responder to check for packets from the manycore //
+//////////////////////////////////////////////////////
+static
+hb_mc_request_packet_id_t resp_ids [] = {
+    RQST_ID(RQST_ID_ANY_X, RQST_ID_ANY_Y, RQST_ID_ADDR(0x8888)),
+    {/*sentinal*/},
+};
+
+static int resp_init(hb_mc_responder_t *resp, hb_mc_manycore_t *mc)
+{
+    return HB_MC_SUCCESS;
+}
+
+static int resp_quit(hb_mc_responder_t *resp, hb_mc_manycore_t *mc)
+{
+    return HB_MC_SUCCESS;
+}
+
+static int resp_respond(hb_mc_responder_t *resp, hb_mc_manycore_t *mc, const hb_mc_request_packet_t *rqst)
+{
+    bsg_pr_info("%s: received packet from (%3d,%3d)\n"
+               , __func__
+               , rqst->x_src
+               , rqst->y_src);
+
+    return HB_MC_SUCCESS;
+}
+
+
+static
+hb_mc_responder_t resp ("host-stream-test", resp_ids, resp_init, resp_quit, resp_respond);
+source_responder(resp);
 
 
 int kernel_host_stream(int argc, char **argv) {
@@ -90,52 +125,6 @@ int kernel_host_stream(int argc, char **argv) {
         for (int i = 0; i < NUM_PACKETS; i++)
         {
             buffer_host[i] = i;
-        }
-
-        // NUM_PACKETS->BUFFER_ELS
-        int packets_sent = 0;
-        int count_host;
-        void *src, *dst;
-        while (packets_sent < NUM_PACKETS) 
-        {
-            // AMO add on device
-            eva_t buffer_eva = buffer_device + packets_sent * sizeof(int);
-            hb_mc_npa_t buffer_npa;
-
-            int count_els = 1;
-            size_t count_sz = count_els * sizeof(int);
-            eva_t send_count_eva = count_device;
-            hb_mc_npa_t send_count_npa;
-            
-            int xfer_els = std::min(BUFFER_ELS, NUM_PACKETS - packets_sent);
-            size_t xfer_sz = xfer_els * sizeof(int);
-
-            printf("Hello 1\n");
-            src = (void *) ((intptr_t) send_count_eva);
-            dst = (void *) &count_host;
-            do {
-                BSG_CUDA_CALL(hb_mc_device_memcpy(device, dst, src, sizeof(int), HB_MC_MEMCPY_TO_HOST));
-            }  while (count_host > 0);
-            printf("Hello 2\n");
-            BSG_CUDA_CALL(hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &send_count_eva, &send_count_npa, &count_sz));
-            printf("Hello 3\n");
-            BSG_CUDA_CALL(hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &buffer_eva, &buffer_npa, &xfer_sz));
-            printf("Hello 4\n");
-
-            dst = (void *) ((intptr_t) buffer_eva);
-            src = (void *) &buffer_host;
-
-            BSG_CUDA_CALL(hb_mc_device_memcpy(device, dst, src, xfer_els * sizeof(int), HB_MC_MEMCPY_TO_DEVICE));
-            printf("Hello 5\n");
-            BSG_CUDA_CALL(hb_mc_manycore_host_request_fence(mc, -1));
-            printf("Hello 6\n");
-            BSG_CUDA_CALL(hb_mc_manycore_amoadd(mc, &send_count_npa, xfer_els, NULL));
-            printf("Hello 7\n");
-            packets_sent += xfer_els;
-            // Write to core with broken reservation
-            // Add interrupt on the host side 
-            //   - response packet or request packet show up in fifo
-            //   - interrupt handler that reads the packet off the fifo
         }
 
         /*****************************************************************************************************************
@@ -181,17 +170,56 @@ int kernel_host_stream(int argc, char **argv) {
 
         eva_t recv_count_eva = count_device + CHAIN_LEN * sizeof(int);
         hb_mc_npa_t recv_count_npa;
+        int recv_count_host;
 
-        printf("recv_count_eva: %x", recv_count_eva);
+        // NUM_PACKETS->BUFFER_ELS
+        int packets_sent = 0;
+        int send_count_host;
+        void *src, *dst;
+        do
+        {
+            int xfer_els = std::min(BUFFER_ELS, NUM_PACKETS - packets_sent);
+            size_t xfer_sz = xfer_els * sizeof(int);
+            eva_t buffer_eva = buffer_device + packets_sent * sizeof(int);
+            hb_mc_npa_t buffer_npa;
+            BSG_CUDA_CALL(hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &buffer_eva, &buffer_npa, &xfer_sz));
 
-        src = (void *) ((intptr_t) recv_count_eva);
-        dst = (void *) &count_host;
-        do {
+            size_t count_sz = sizeof(int);
+            eva_t send_count_eva = count_device;
+            hb_mc_npa_t send_count_npa;
+            BSG_CUDA_CALL(hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &send_count_eva, &send_count_npa, &count_sz));
+            
+            printf("Hello 1\n");
+            src = (void *) ((intptr_t) send_count_eva);
+            dst = (void *) &send_count_host;
+            // Poll until queue is empty
+            do {
+                BSG_CUDA_CALL(hb_mc_device_memcpy(device, dst, src, sizeof(int), HB_MC_MEMCPY_TO_HOST));
+            }  while (send_count_host > 0);
+
+            dst = (void *) ((intptr_t) buffer_eva);
+            src = (void *) &buffer_host;
+
+            BSG_CUDA_CALL(hb_mc_device_memcpy(device, dst, src, xfer_els * sizeof(int), HB_MC_MEMCPY_TO_DEVICE));
+            printf("Hello 5\n");
+            BSG_CUDA_CALL(hb_mc_manycore_host_request_fence(mc, -1));
+            printf("Hello 6\n");
+            BSG_CUDA_CALL(hb_mc_manycore_amoadd(mc, &send_count_npa, xfer_els, NULL));
+            printf("Hello 7\n");
+            packets_sent += xfer_els;
+            // Write to core with broken reservation
+            // Add interrupt on the host side 
+            //   - response packet or request packet show up in fifo
+            //   - interrupt handler that reads the packet off the fifo
+
+            printf("recv_count_eva: %x", recv_count_eva);
+            src = (void *) ((intptr_t) recv_count_eva);
+            dst = (void *) &recv_count_host;
             BSG_CUDA_CALL(hb_mc_device_memcpy(device, dst, src, sizeof(int), HB_MC_MEMCPY_TO_HOST));
             //hb_mc_request_packet_t rqst;
             //BSG_CUDA_CALL(hb_mc_manycore_request_rx(device->mc, &rqst, -1));
             BSG_CUDA_CALL(hb_mc_device_pod_wait_for_tile_group_finish_any(device, pod));
-            //printf("COUNT: %d\n", count_host);
+            //printf("COUNT: %d\n", recv_count_host);
             //while (hb_mc_device_pod_all_tile_groups_finished(device, pod) != HB_MC_SUCCESS) {
             //    BSG_CUDA_CALL(hb_mc_device_pod_wait_for_tile_group_finish_any(device, pod));
             //}
