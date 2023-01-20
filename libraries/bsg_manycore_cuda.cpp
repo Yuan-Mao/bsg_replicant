@@ -1677,18 +1677,20 @@ static
 int hb_mc_device_podv_wait_for_tile_group_finish_any(hb_mc_device_t *device,
                                                      hb_mc_pod_id_t *podv,
                                                      int podc,
-                                                     hb_mc_pod_id_t *pod_done);
+                                                     hb_mc_pod_id_t *pod_done,
+                                                     int timeout);
 
 /**
  * Wait for a tile group to complete for a pod.
  */
-int hb_mc_device_pod_wait_for_tile_group_finish_any(hb_mc_device_t *device, hb_mc_pod_t *pod)
+int hb_mc_device_pod_wait_for_tile_group_finish_any(hb_mc_device_t *device, hb_mc_pod_t *pod, int timeout)
 {
         hb_mc_pod_id_t pid, pid_done;
         pid = hb_mc_device_pod_to_pod_id(device, pod);
         return hb_mc_device_podv_wait_for_tile_group_finish_any(device,
                                                                 &pid, 1,
-                                                                &pid_done);
+                                                                &pid_done,
+                                                                timeout);
 }
 
 /**
@@ -1755,7 +1757,7 @@ int hb_mc_device_pod_kernels_execute(hb_mc_device_t *device,
                 BSG_CUDA_CALL(hb_mc_device_pod_try_launch_tile_groups(device, pod));
 
                 // wait for any tile group to complete
-                BSG_CUDA_CALL(hb_mc_device_pod_wait_for_tile_group_finish_any(device, pod));
+                BSG_CUDA_CALL(hb_mc_device_pod_wait_for_tile_group_finish_any(device, pod, -1));
         }
 
         return HB_MC_SUCCESS;
@@ -1804,11 +1806,13 @@ static
 int hb_mc_device_podv_wait_for_tile_group_finish_any(hb_mc_device_t *device,
                                                      hb_mc_pod_id_t *podv,
                                                      int podc,
-                                                     hb_mc_pod_id_t *pod_done)
+                                                     hb_mc_pod_id_t *pod_done,
+                                                     int timeout)
 {
-        bsg_pr_info("%s: calling\n", __func__);
+        bsg_pr_dbg("%s: calling\n", __func__);
 
-        while (true) {
+        int iter = 0;
+        while (timeout == -1 || iter++ < timeout) {
                 hb_mc_request_packet_t rqst;
 
                 // perform a blocking read from the request fifo
@@ -1902,7 +1906,7 @@ int hb_mc_device_podv_kernels_execute(hb_mc_device_t *device,
                 /* wait for any tile group to finish on any pod */
                 hb_mc_pod_id_t pod;
                 BSG_CUDA_CALL(hb_mc_device_podv_wait_for_tile_group_finish_any(device, podv, podc,
-                                                                               &pod));
+                                                                               &pod, -1));
 
                 /* try launching launching tile groups on pod with most recent completion */
                 BSG_CUDA_CALL(hb_mc_device_pod_try_launch_tile_groups(device, &device->pods[pod]));

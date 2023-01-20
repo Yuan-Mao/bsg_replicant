@@ -400,7 +400,7 @@ extern "C" {
         int hb_mc_device_pod_try_launch_tile_groups(hb_mc_device_t *device,
                                                     hb_mc_pod_t *pod);
 
-int hb_mc_device_pod_wait_for_tile_group_finish_any(hb_mc_device_t *device, hb_mc_pod_t *pod);
+int hb_mc_device_pod_wait_for_tile_group_finish_any(hb_mc_device_t *device, hb_mc_pod_t *pod, int timeout);
 
         /**
          * Launches all kernel invocations enqueued on pod.

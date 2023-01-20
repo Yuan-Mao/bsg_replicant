@@ -38,7 +38,9 @@ int kernel_host_stream(int *buffer_chain, int *buffer_count)
 
         if (__bsg_id == CHAIN_LEN-1)
         {
-            // RETURN CODE
+            int *ptr = (int*)bsg_remote_ptr_io(IO_X_INDEX, 0x8888);
+            *ptr = send_data;
+            bsg_printf("SENDING END OF CHAIN %d\n", send_data);
         }
         else
         {

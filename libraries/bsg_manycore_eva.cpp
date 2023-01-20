@@ -1152,7 +1152,7 @@ int hb_mc_manycore_eva_write_internal(hb_mc_manycore_t *mc,
                 xfer_sz = min_size_t(sz, dest_sz);
 
                 char npa_str[256];
-                bsg_pr_dbg("writing %zd bytes to eva %08x (%s)\n",
+                bsg_pr_info("writing %zd bytes to eva %08x (%s)\n",
                            xfer_sz,
                            curr_eva,
                            hb_mc_npa_to_string(&dest_npa, npa_str, sizeof(npa_str)));
