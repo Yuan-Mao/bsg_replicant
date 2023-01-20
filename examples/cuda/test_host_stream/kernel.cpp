@@ -9,7 +9,7 @@ bsg_barrier<bsg_tiles_X, bsg_tiles_Y> barrier;
 
 #define BUFFER_ELS  10
 #define CHAIN_LEN    4
-#define NUM_PACKETS 10
+#define NUM_PACKETS 100
 
 extern "C" __attribute__ ((noinline))
 int kernel_host_stream(int *buffer_chain, int *buffer_count)

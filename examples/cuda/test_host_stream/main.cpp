@@ -46,7 +46,7 @@
 
 #define BUFFER_ELS  10
 #define CHAIN_LEN    4
-#define NUM_PACKETS 10
+#define NUM_PACKETS 100
 
 /*!
  * Runs a host_stream kernel on a 2x2 tile group. 
@@ -177,7 +177,7 @@ int kernel_host_stream(int argc, char **argv) {
         do
         {
             size_t xfer_sz = sizeof(int);
-            eva_t buffer_eva = buffer_device + packets_sent * sizeof(int);
+            eva_t buffer_eva = buffer_device + (packets_sent % BUFFER_ELS) * sizeof(int);
             hb_mc_npa_t buffer_npa;
             BSG_CUDA_CALL(hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &buffer_eva, &buffer_npa, &xfer_sz));
 
