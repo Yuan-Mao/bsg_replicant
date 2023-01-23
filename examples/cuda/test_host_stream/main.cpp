@@ -54,6 +54,9 @@
  * This test streams data through circular buffers on the host through the manycore
  * in a chain, then streams back to the host. Validation is that the data received
  * matches the data pattern sent.
+ * 
+ * This test demonstrates how host can be run concurrently with manycore code in a
+ * streaming or cooperative manner.
  */
 
 int kernel_host_stream(int argc, char **argv) {
@@ -143,9 +146,8 @@ int kernel_host_stream(int argc, char **argv) {
                 }
             }
 
-            //int timeout = hb_mc_device_pod_wait_for_tile_group_finish_any(device, pod, 1);
-            hb_mc_request_packet_t rqst;
-            int rc = hb_mc_manycore_request_rx(device->mc, &rqst, 1);
+            // Check for finish
+            hb_mc_device_pod_wait_for_tile_group_finish_any(device, pod, 1);
         } while (packets_recv < NUM_PACKETS);
         
         /*****************************************************************************************************************
@@ -153,6 +155,7 @@ int kernel_host_stream(int argc, char **argv) {
         ******************************************************************************************************************/
         BSG_CUDA_CALL(hb_mc_device_finish(device)); 
 
+        // Fail if data is not expected
         if (mismatch) { 
                 return HB_MC_FAIL;
         }

@@ -1815,7 +1815,7 @@ int hb_mc_device_podv_wait_for_tile_group_finish_any(hb_mc_device_t *device,
         while (1) {
                 hb_mc_request_packet_t rqst;
 
-                // perform a blocking read from the request fifo
+                // perform a read from the request fifo
                 int rc;
                 if ((rc = hb_mc_manycore_request_rx(device->mc, &rqst, timeout)) != HB_MC_SUCCESS)
                     return rc;
@@ -1881,7 +1881,6 @@ int hb_mc_device_podv_wait_for_tile_group_finish_any(hb_mc_device_t *device,
                            "value but no matching tile-group",
                            __func__);
         }
-        return HB_MC_TIMEOUT;
 }
 
 /**
