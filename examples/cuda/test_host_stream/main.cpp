@@ -50,11 +50,11 @@
 #define NUM_PACKETS 100
 
 /*!
- * Runs a host_stream kernel on a 2x2 tile group. 
- * Device allcoates memory on device and uses hb_mc_device_memset to set to a prefixed valu.
- * Device then calls an empty kernel and loads back the meomry to compare.
- * This tests uses the software/spmd/bsg_cuda_lite_runtime/host_stream/ Manycore binary in the BSG Manycore bitbucket repository.  
-*/
+ * Runs a host_stream kernel on a 2x2 tile group.
+ * This test streams data through circular buffers on the host through the manycore
+ * in a chain, then streams back to the host. Validation is that the data received
+ * matches the data pattern sent.
+ */
 
 int kernel_host_stream(int argc, char **argv) {
         int rc;
@@ -111,42 +111,42 @@ int kernel_host_stream(int argc, char **argv) {
         /*****************************************************************************************************************
         * Launch and execute all tile groups on device and wait for all to finish. 
         ******************************************************************************************************************/
-        BSG_CUDA_CALL(hb_mc_device_pod_try_launch_tile_groups(device, pod));
 
-        eva_t recv_count_eva = count_device + CHAIN_LEN * sizeof(int);
-        eva_t recv_buffer_eva = buffer_device + (CHAIN_LEN * BUFFER_ELS * sizeof(int));
-        // NUM_PACKETS->BUFFER_ELS
         int packets_sent = 0;
         int packets_recv = 0;
         int mismatch = 0;
-        int count_host;
         void *src, *dst;
 
-        bsg_manycore_spsc_queue_recv<int, BUFFER_ELS> recv_spsc(device, recv_buffer_eva, recv_count_eva);
         eva_t send_count_eva = count_device;
         eva_t send_buffer_eva = buffer_device;
         bsg_manycore_spsc_queue_send<int, BUFFER_ELS> send_spsc(device, send_buffer_eva, send_count_eva);
+
+        eva_t recv_count_eva = count_device + CHAIN_LEN * sizeof(int);
+        eva_t recv_buffer_eva = buffer_device + (CHAIN_LEN * BUFFER_ELS * sizeof(int));
+        bsg_manycore_spsc_queue_recv<int, BUFFER_ELS> recv_spsc(device, recv_buffer_eva, recv_count_eva);
+        BSG_CUDA_CALL(hb_mc_manycore_host_request_fence(mc, -1));
+        BSG_CUDA_CALL(hb_mc_device_pod_try_launch_tile_groups(device, pod));
         do
         {
             int send_data = packets_sent;
             if (send_spsc.try_send(send_data))
             {
-                printf("SEND-ing to buffer %d\n", send_data);
                 packets_sent++;
             }
 
             int recv_data;
             if (recv_spsc.try_recv(&recv_data))
             {
-                printf("RECV-ing from buffer %d\n", recv_data);
                 if (recv_data != packets_recv++)
                 {
                     mismatch = 1;
                 }
             }
 
-            BSG_CUDA_CALL(hb_mc_device_pod_wait_for_tile_group_finish_any(device, pod, 10));
-        } while (hb_mc_device_pod_all_tile_groups_finished(device, pod) != HB_MC_SUCCESS);
+            //int timeout = hb_mc_device_pod_wait_for_tile_group_finish_any(device, pod, 1);
+            hb_mc_request_packet_t rqst;
+            int rc = hb_mc_manycore_request_rx(device->mc, &rqst, 1);
+        } while (packets_recv < NUM_PACKETS);
         
         /*****************************************************************************************************************
         * Freeze the tiles and memory manager cleanup. 

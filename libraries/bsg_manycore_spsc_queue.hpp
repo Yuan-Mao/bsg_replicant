@@ -9,24 +9,11 @@ private:
     hb_mc_manycore_t *mc;
     hb_mc_eva_t buffer_eva;
     hb_mc_eva_t count_eva;
-    hb_mc_npa_t buffer_npa;
-    hb_mc_npa_t count_npa;
     int rptr;
 
 public:
-    bsg_manycore_spsc_queue_recv(hb_mc_device_t *device, eva_t buffer_eva, eva_t count_eva) 
-        : device(device), mc(device->mc), buffer_eva(buffer_eva), count_eva(count_eva), rptr(0)
-    {
-        hb_mc_pod_id_t pod_id = device->default_pod_id;
-        hb_mc_pod_t *pod = &device->pods[pod_id];
-        size_t xfer_sz = sizeof(T);
-        // TODO: Check return and error?
-        hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &buffer_eva, &buffer_npa, &xfer_sz);
-        hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &count_eva, &count_npa, &xfer_sz);
-
-        printf("RECV Buffer EVA %x Count EVA %x Buffer NPA %x Count NPA %x\n",
-                buffer_eva, count_eva, buffer_npa, count_npa);
-    };
+    bsg_manycore_spsc_queue_recv(hb_mc_device_t *device, eva_t buffer_eva, eva_t count_eva)
+        : device(device), mc(device->mc), buffer_eva(buffer_eva), count_eva(count_eva), rptr(0) { }
 
     bool is_empty(void)
     {
@@ -34,6 +21,7 @@ public:
         void *src = (void *) ((intptr_t) count_eva);
         void *dst = (void *) &count;
         BSG_CUDA_CALL(hb_mc_device_memcpy(device, dst, src, sizeof(T), HB_MC_MEMCPY_TO_HOST));
+
         return count == 0;
     }
 
@@ -54,21 +42,14 @@ public:
         {
             rptr = 0;
         }
+        hb_mc_pod_id_t pod_id = device->default_pod_id;
+        hb_mc_pod_t *pod = &device->pods[pod_id];
+        hb_mc_npa_t count_npa;
+        size_t xfer_sz = sizeof(int);
+        BSG_CUDA_CALL(hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &count_eva, &count_npa, &xfer_sz));
         BSG_CUDA_CALL(hb_mc_manycore_amoadd(mc, &count_npa, -1, NULL));
 
         return true;
-    }
-
-    // TODO: Add timeout?
-    T recv(void)
-    {
-        T data;
-        while (1)
-        {
-            if (try_recv(&data)) break;
-        }
-
-        return data;
     }
 };
 
@@ -79,24 +60,11 @@ private:
     hb_mc_manycore_t *mc;
     hb_mc_eva_t buffer_eva;
     hb_mc_eva_t count_eva;
-    hb_mc_npa_t buffer_npa;
-    hb_mc_npa_t count_npa;
     int wptr;
 
 public:
     bsg_manycore_spsc_queue_send(hb_mc_device_t *device, eva_t buffer_eva, eva_t count_eva)
-        : device(device), mc(device->mc), buffer_eva(buffer_eva), count_eva(count_eva), wptr(0)
-    {
-        hb_mc_pod_id_t pod_id = device->default_pod_id;
-        hb_mc_pod_t *pod = &device->pods[pod_id];
-        size_t xfer_sz = sizeof(T);
-        // TODO: Check return and error?
-        hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &buffer_eva, &buffer_npa, &xfer_sz);
-        hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &count_eva, &count_npa, &xfer_sz);
-
-        printf("SEND Buffer EVA %x Count EVA %x Buffer NPA %x Count NPA %x\n",
-                buffer_eva, count_eva, buffer_npa, count_npa);
-    };
+        : device(device), mc(device->mc), buffer_eva(buffer_eva), count_eva(count_eva), wptr(0) { }
 
     bool is_full(void)
     {
@@ -104,6 +72,7 @@ public:
         void *src = (void *) ((intptr_t) count_eva);
         void *dst = (void *) &count;
         BSG_CUDA_CALL(hb_mc_device_memcpy(device, dst, src, sizeof(T), HB_MC_MEMCPY_TO_HOST));
+
         return count == S;
     }
 
@@ -124,18 +93,14 @@ public:
         {
             wptr = 0;
         }
+        hb_mc_pod_id_t pod_id = device->default_pod_id;
+        hb_mc_pod_t *pod = &device->pods[pod_id];
+        hb_mc_npa_t count_npa;
+        size_t xfer_sz = sizeof(int);
+        BSG_CUDA_CALL(hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &count_eva, &count_npa, &xfer_sz));
         BSG_CUDA_CALL(hb_mc_manycore_amoadd(mc, &count_npa, 1, NULL));
 
         return true;
-    }
-
-    // TODO: Add timeout?
-    void send(T data)
-    {
-        while (1)
-        {
-            if (try_send(data)) break;
-        }
     }
 };
 
