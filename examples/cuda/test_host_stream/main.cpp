@@ -56,44 +56,6 @@
  * This tests uses the software/spmd/bsg_cuda_lite_runtime/host_stream/ Manycore binary in the BSG Manycore bitbucket repository.  
 */
 
-//////////////////////////////////////////////////////
-// Responder to check for packets from the manycore //
-//////////////////////////////////////////////////////
-static
-hb_mc_request_packet_id_t resp_ids [] = {
-    RQST_ID(RQST_ID_ANY_X, RQST_ID_ANY_Y, RQST_ID_ADDR(0x8888)),
-    {/*sentinal*/},
-};
-
-static int resp_init(hb_mc_responder_t *resp, hb_mc_manycore_t *mc)
-{
-    return HB_MC_SUCCESS;
-}
-
-static int resp_quit(hb_mc_responder_t *resp, hb_mc_manycore_t *mc)
-{
-    return HB_MC_SUCCESS;
-}
-
-static std::vector<int> pkt_data;
-static int resp_respond(hb_mc_responder_t *resp, hb_mc_manycore_t *mc, const hb_mc_request_packet_t *rqst)
-{
-    bsg_pr_info("%s: received packet %d from (%3d,%3d)\n"
-               , __func__
-               , static_cast<int>(hb_mc_request_packet_get_data(rqst))
-               , rqst->x_src
-               , rqst->y_src);
-
-    pkt_data.push_back(static_cast<int>(hb_mc_request_packet_get_data(rqst)));
-    return HB_MC_SUCCESS;
-}
-
-
-static
-hb_mc_responder_t resp ("host-stream-test", resp_ids, resp_init, resp_quit, resp_respond);
-source_responder(resp);
-
-
 int kernel_host_stream(int argc, char **argv) {
         int rc;
         char *bin_path, *test_name;
@@ -126,12 +88,6 @@ int kernel_host_stream(int argc, char **argv) {
 
         BSG_CUDA_CALL(hb_mc_device_memset(device, &count_device, 0, (CHAIN_LEN+1) * sizeof(int)));
 
-        int buffer_host [NUM_PACKETS];
-        for (int i = 0; i < NUM_PACKETS; i++)
-        {
-            buffer_host[i] = i;
-        }
-
         /*****************************************************************************************************************
         * Define block_size_x/y: amount of work for each tile group
         * Define tg_dim_x/y: number of tiles in each tile group
@@ -155,55 +111,27 @@ int kernel_host_stream(int argc, char **argv) {
         /*****************************************************************************************************************
         * Launch and execute all tile groups on device and wait for all to finish. 
         ******************************************************************************************************************/
-        //  Constantly polls
-        //  Instead call user callback while polling
-        //  Context switching or co-routines
-        //  TBB 
-        //  Interrupt when packet gets received, can do bare metal
-        //  Thread job to periodically read off the queue
-        //  Callback hook in inner loop of try execute
-        //  BSG_CUDA_CALL(hb_mc_device_tile_groups_execute(device));
-        //  Make nonblocking and set flags
-        //  Flags or decrement while finishing, tile_groups -> 0
-        //  Caller provides pointer, set to tile groups in queue??
-        //    Or poll how many tilegroups are still running?
-        //
         BSG_CUDA_CALL(hb_mc_device_pod_try_launch_tile_groups(device, pod));
 
         eva_t recv_count_eva = count_device + CHAIN_LEN * sizeof(int);
         eva_t recv_buffer_eva = buffer_device + (CHAIN_LEN * BUFFER_ELS * sizeof(int));
         // NUM_PACKETS->BUFFER_ELS
         int packets_sent = 0;
+        int packets_recv = 0;
+        int mismatch = 0;
         int count_host;
         void *src, *dst;
 
         bsg_manycore_spsc_queue_recv<int, BUFFER_ELS> recv_spsc(device, recv_buffer_eva, recv_count_eva);
+        eva_t send_count_eva = count_device;
+        eva_t send_buffer_eva = buffer_device;
+        bsg_manycore_spsc_queue_send<int, BUFFER_ELS> send_spsc(device, send_buffer_eva, send_count_eva);
         do
         {
-            size_t xfer_sz = sizeof(int);
-            eva_t buffer_eva = buffer_device + (packets_sent % BUFFER_ELS) * sizeof(int);
-            hb_mc_npa_t buffer_npa;
-            BSG_CUDA_CALL(hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &buffer_eva, &buffer_npa, &xfer_sz));
-
-            size_t count_sz = sizeof(int);
-            eva_t count_eva = count_device;
-            hb_mc_npa_t count_npa;
-            BSG_CUDA_CALL(hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &count_eva, &count_npa, &count_sz));
-            if (packets_sent == 0)
+            int send_data = packets_sent;
+            if (send_spsc.try_send(send_data))
             {
-                printf("x86 BUFFER EVA/NPA: %x/%x\n", buffer_eva, buffer_npa);
-            }
-            
-            src = (void *) ((intptr_t) count_eva);
-            dst = (void *) &count_host;
-            BSG_CUDA_CALL(hb_mc_device_memcpy(device, dst, src, sizeof(int), HB_MC_MEMCPY_TO_HOST));
-            if (count_host < BUFFER_ELS)
-            {
-                dst = (void *) ((intptr_t) buffer_eva);
-                src = (void *) &buffer_host[packets_sent];
-                BSG_CUDA_CALL(hb_mc_device_memcpy(device, dst, src, sizeof(int), HB_MC_MEMCPY_TO_DEVICE));
-                BSG_CUDA_CALL(hb_mc_manycore_host_request_fence(mc, -1));
-                BSG_CUDA_CALL(hb_mc_manycore_amoadd(mc, &count_npa, 1, NULL));
+                printf("SEND-ing to buffer %d\n", send_data);
                 packets_sent++;
             }
 
@@ -211,30 +139,19 @@ int kernel_host_stream(int argc, char **argv) {
             if (recv_spsc.try_recv(&recv_data))
             {
                 printf("RECV-ing from buffer %d\n", recv_data);
+                if (recv_data != packets_recv++)
+                {
+                    mismatch = 1;
+                }
             }
-
-            // Write to core with broken reservation
-            // Add interrupt on the host side 
-            //   - response packet or request packet show up in fifo
-            //   - interrupt handler that reads the packet off the fifo
 
             BSG_CUDA_CALL(hb_mc_device_pod_wait_for_tile_group_finish_any(device, pod, 10));
         } while (hb_mc_device_pod_all_tile_groups_finished(device, pod) != HB_MC_SUCCESS);
         
-
-
         /*****************************************************************************************************************
         * Freeze the tiles and memory manager cleanup. 
         ******************************************************************************************************************/
         BSG_CUDA_CALL(hb_mc_device_finish(device)); 
-
-        int mismatch = 0; 
-        for (int i = 0; i < NUM_PACKETS; i++) {
-                if (pkt_data[i] != i) { 
-                        bsg_pr_err(BSG_RED("Mismatch") ": -- A[%d] = 0x%08" PRIx32 "\t Expected: 0x%08" PRIx32 "\n", i , pkt_data[i], i);
-                        mismatch = 1;
-                }
-        } 
 
         if (mismatch) { 
                 return HB_MC_FAIL;
