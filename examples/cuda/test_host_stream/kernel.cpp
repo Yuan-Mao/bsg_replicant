@@ -41,6 +41,7 @@ int kernel_host_stream(int *buffer_chain, int *buffer_count)
             int *ptr = (int*)bsg_remote_ptr_io(IO_X_INDEX, 0x8888);
             *ptr = send_data;
             bsg_printf("SENDING END OF CHAIN %d\n", send_data);
+            send_spsc.send(send_data);
         }
         else
         {

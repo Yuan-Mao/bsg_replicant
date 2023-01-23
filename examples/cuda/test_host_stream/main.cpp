@@ -40,6 +40,7 @@
 #include <bsg_manycore_responder.h>
 #include <algorithm>
 #include <vector>
+#include <bsg_manycore_spsc_queue.hpp>
 
 #define ALLOC_NAME "default_allocator"
 #define TEST_BYTE 0xcd
@@ -120,10 +121,10 @@ int kernel_host_stream(int argc, char **argv) {
         ******************************************************************************************************************/
         eva_t buffer_device;
         eva_t count_device;
-        BSG_CUDA_CALL(hb_mc_device_malloc(device, BUFFER_ELS * CHAIN_LEN * sizeof(int), &buffer_device));
-        BSG_CUDA_CALL(hb_mc_device_malloc(device, CHAIN_LEN * sizeof(int), &count_device));
+        BSG_CUDA_CALL(hb_mc_device_malloc(device, BUFFER_ELS * (CHAIN_LEN+1) * sizeof(int), &buffer_device));
+        BSG_CUDA_CALL(hb_mc_device_malloc(device, (CHAIN_LEN+1) * sizeof(int), &count_device));
 
-        BSG_CUDA_CALL(hb_mc_device_memset(device, &count_device, 0, CHAIN_LEN * sizeof(int)));
+        BSG_CUDA_CALL(hb_mc_device_memset(device, &count_device, 0, (CHAIN_LEN+1) * sizeof(int)));
 
         int buffer_host [NUM_PACKETS];
         for (int i = 0; i < NUM_PACKETS; i++)
@@ -170,10 +171,13 @@ int kernel_host_stream(int argc, char **argv) {
         BSG_CUDA_CALL(hb_mc_device_pod_try_launch_tile_groups(device, pod));
 
         eva_t recv_count_eva = count_device + CHAIN_LEN * sizeof(int);
+        eva_t recv_buffer_eva = buffer_device + (CHAIN_LEN * BUFFER_ELS * sizeof(int));
         // NUM_PACKETS->BUFFER_ELS
         int packets_sent = 0;
         int count_host;
         void *src, *dst;
+
+        bsg_manycore_spsc_queue_recv<int, BUFFER_ELS> recv_spsc(device, recv_buffer_eva, recv_count_eva);
         do
         {
             size_t xfer_sz = sizeof(int);
@@ -185,6 +189,10 @@ int kernel_host_stream(int argc, char **argv) {
             eva_t count_eva = count_device;
             hb_mc_npa_t count_npa;
             BSG_CUDA_CALL(hb_mc_eva_to_npa(mc, &default_map, &pod->mesh->origin, &count_eva, &count_npa, &count_sz));
+            if (packets_sent == 0)
+            {
+                printf("x86 BUFFER EVA/NPA: %x/%x\n", buffer_eva, buffer_npa);
+            }
             
             src = (void *) ((intptr_t) count_eva);
             dst = (void *) &count_host;
@@ -197,6 +205,12 @@ int kernel_host_stream(int argc, char **argv) {
                 BSG_CUDA_CALL(hb_mc_manycore_host_request_fence(mc, -1));
                 BSG_CUDA_CALL(hb_mc_manycore_amoadd(mc, &count_npa, 1, NULL));
                 packets_sent++;
+            }
+
+            int recv_data;
+            if (recv_spsc.try_recv(&recv_data))
+            {
+                printf("RECV-ing from buffer %d\n", recv_data);
             }
 
             // Write to core with broken reservation
