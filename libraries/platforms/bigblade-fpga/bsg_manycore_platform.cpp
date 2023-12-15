@@ -488,7 +488,6 @@ int hb_mc_platform_init(hb_mc_manycore_t *mc,
         return HB_MC_SUCCESS;
 }
 
-
 /**
  * Stall until the all requests (and responses) have reached their destination.
  * @param[in]  mc     A manycore instance initialized with hb_mc_manycore_init()
@@ -530,6 +529,25 @@ int hb_mc_platform_fence(hb_mc_manycore_t *mc,
         return HB_MC_SUCCESS;
 }
 
+/**
+ * Signal the hardware to start a bulk transfer over the network
+ * @param[in]  mc     A manycore instance initialized with hb_mc_manycore_init()
+ * @return HB_MC_SUCCESS on success. Otherwise an error code defined in bsg_manycore_errno.h.
+ */
+int hb_mc_platform_start_bulk_transfer(hb_mc_manycore_t *mc)
+{
+        return HB_MC_SUCCESS;
+}
+
+/**
+ * Signal the hardware to end a bulk transfer over the network
+ * @param[in]  mc     A manycore instance initialized with hb_mc_manycore_init()
+ * @return HB_MC_SUCCESS on success. Otherwise an error code defined in bsg_manycore_errno.h.
+ */
+int hb_mc_platform_finish_bulk_transfer(hb_mc_manycore_t *mc)
+{
+        return HB_MC_SUCCESS;
+}
 
 /**
  * Get the current cycle counter of the Manycore Platform

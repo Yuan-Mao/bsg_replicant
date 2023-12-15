@@ -232,20 +232,3 @@ int hb_mc_mmio_write(hb_mc_mmio_t mmio, uintptr_t offset,
         return HB_MC_SUCCESS;
 }
 
-/**
- * Signal the hardware to start a bulk transfer over the network
- * @param[in]  mc     A manycore instance initialized with hb_mc_manycore_init()
- * @return HB_MC_SUCCESS on success. Otherwise an error code defined in bsg_manycore_errno.h.
- */
-int hb_mc_platform_start_bulk_transfer(hb_mc_manycore_t *mc){
-        return HB_MC_SUCCESS;
-}
-
-/**
- * Signal the hardware to end a bulk transfer over the network
- * @param[in]  mc     A manycore instance initialized with hb_mc_manycore_init()
- * @return HB_MC_SUCCESS on success. Otherwise an error code defined in bsg_manycore_errno.h.
- */
-int hb_mc_platform_finish_bulk_transfer(hb_mc_manycore_t *mc){
-        return HB_MC_SUCCESS;
-}
