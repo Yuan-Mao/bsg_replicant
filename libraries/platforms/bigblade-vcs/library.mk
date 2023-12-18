@@ -27,7 +27,7 @@
 
 PLATFORM_CXXSOURCES += $(BSG_PLATFORM_PATH)/bsg_manycore_simulator.cpp
 PLATFORM_CXXSOURCES += $(BSG_PLATFORM_PATH)/bsg_manycore_platform.cpp
-
+include /mnt/users/ssd1/homes/ymchueh/tmp/bsg_cadenv/cadenv.mk
 include $(LIBRARIES_PATH)/platforms/common/dpi/library.mk
 ifeq ($(VCS_HOME),)
 $(error Please set VCS_HOME to a VCS release directory)
