@@ -267,7 +267,7 @@ $(BSG_MACHINE_PATH)/bsg_bladerunner_pkg.v: $(BSG_MACHINE_PATH)/bsg_bladerunner_c
 	@echo >> $@
 	@echo "parameter int bsg_machine_dram_bank_words_gp = $(BSG_MACHINE_DRAM_BANK_WORDS);" >> $@
 	@echo "parameter int bsg_machine_dram_channels_gp = $(BSG_MACHINE_DRAM_CHANNELS);" >> $@
-	@echo "parameter int bsg_machine_dram_words_gp = $(BSG_MACHINE_DRAM_WORDS);" >> $@
+	@echo "parameter bsg_machine_dram_words_gp = 64'd$(BSG_MACHINE_DRAM_WORDS);" >> $@
 	@echo "parameter bsg_manycore_mem_cfg_e bsg_machine_dram_cfg_gp = $(BSG_MACHINE_MEM_CFG);" >> $@
 	@echo >> $@
 	@echo "parameter bit bsg_machine_branch_trace_en_gp = $(BSG_MACHINE_BRANCH_TRACE_EN);" >> $@
