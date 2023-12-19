@@ -117,8 +117,8 @@ module replicant_tb_top
    // reset_done is deasserted when tag programming is done.
    logic core_reset_done_lo, core_reset_done_r;
 
-   logic mem_clk;
-   logic mem_reset;
+   logic dram_clk;
+   bit   dram_bit_clk;
 
    logic cache_clk;
    logic cache_reset;
@@ -156,6 +156,17 @@ module replicant_tb_top
    core_clk_gen
      (.o(bit_clk));
    assign core_clk = bit_clk;
+
+   bsg_nonsynth_clock_gen
+`ifdef BSG_MACHINE_DRAMSIM3_PKG
+  `define dram_pkg `BSG_MACHINE_DRAMSIM3_PKG
+     #(.cycle_time_p(`dram_pkg::tck_ps))
+`else
+     #(.cycle_time_p(bsg_machine_pods_cycle_time_ps_gp))
+`endif
+    dram_clk_gen
+      (.o(dram_bit_clk));
+    assign dram_clk = dram_bit_clk;
 
    bsg_nonsynth_reset_gen
      #(
@@ -222,6 +233,7 @@ module replicant_tb_top
    testbench
      (
       .clk_i(core_clk)
+      ,.dram_clk_i(dram_clk)
       ,.reset_i(core_reset)
 
       ,.io_link_sif_i(host_link_sif_li)
