@@ -328,6 +328,7 @@ module replicant_tb_top
       ,.print_stat_tag_o(print_stat_tag)
       );
 
+  wire [63:0] runtime_count_lo;
    // In VCS, the C/C++ testbench is controlled by the
    // simulator. Therefore, we need to "call into" the C/C++ program
    // using the cosim_main function, during the initial block.
@@ -345,6 +346,7 @@ module replicant_tb_top
       $value$plusargs("c_path=%s", path);
       $value$plusargs("c_args=%s", args);
       replicant_tb_top.cosim_main(exit_code, args, path);
+      $display("Runtime cycle count: 0x%0x", runtime_count_lo);
       if(exit_code < 0) begin
         $display("BSG COSIM FAIL: Test failed with exit code: %d", exit_code);
         $fatal;
@@ -368,4 +370,33 @@ module replicant_tb_top
     ,.saif_en_o($root.`HOST_MODULE_PATH.saif_en)
    );
 `endif
+
+  logic timer_status_r, timer_status_n;
+  wire is_timer_packet = (12'hAED == $root.`HOST_MODULE_PATH.mc_dpi.mc_req_data_li[82+:12]) & ($root.`HOST_MODULE_PATH.mc_dpi.mc_req_v_li & $root.`HOST_MODULE_PATH.mc_dpi.mc_req_ready_lo);
+  wire clear_li = ~timer_status_r & is_timer_packet;
+  wire up_li = timer_status_r;
+  assign timer_status_n = is_timer_packet ? ~timer_status_r: timer_status_r;
+
+  bsg_dff_reset #(
+     .width_p(1)
+  ) timer_status_reg (
+     .clk_i(core_clk)
+    ,.reset_i(core_reset)
+    ,.data_i(timer_status_n)
+    ,.data_o(timer_status_r)
+  );
+
+  bsg_counter_clear_up #(
+     .max_val_p(~64'd0)
+    ,.ptr_width_lp(64)
+    ,.init_val_p(0)
+  ) runtime_counter (
+     .clk_i(core_clk)
+    ,.reset_i(core_reset)
+
+    ,.clear_i(clear_li)
+    ,.up_i(up_li)
+    ,.count_o(runtime_count_lo)
+  );
+
 endmodule
